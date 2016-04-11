@@ -1,16 +1,24 @@
 import httplib2
 import os
 import configparser
+import uuid
+import time
+from datetime import date
 
 from apiclient import discovery
 import oauth2client
 from oauth2client import client
 from oauth2client import tools
+import peewee
 
-
+import kbb.task as task
+import kbb.action as action
 
 
 class Kbb(object):
+
+    NOTDONE = "needsAction"
+    DONE = "completed"
 
     # If modifying these scopes, delete these previously saved credentials
     SCOPES = 'https://www.googleapis.com/auth/tasks'
@@ -76,7 +84,7 @@ class Kbb(object):
             config['stages'] = list()
             for key in stages:
                 if stages.getboolean(key):
-                    config['stages'].append(key)
+                    config['stages'].append(key.lower())
 
         except ParsingError:
             print('Error parsing config file. Aborting.')
@@ -89,8 +97,34 @@ class Kbb(object):
         return None
 
 
-    def add_task(self, task, stage, task_id=None):
+    def _locate_task(self, task_id):
+        """Find a task by its task_id"""
+        result_tasks = task.Task.select().where(task.Task.ident == task_id)
+
+        if not result_tasks:
+            raise Exception('task_id not found')
+
+        elif len(result_tasks) > 1:
+            raise Exception('task_id is not unique')
+
+        return result_tasks[0]
+
+
+
+    def new_task(self, 
+                 title, 
+                 stage=None,
+                 due=None,
+                 notes=None,
+                 status=None,
+                 task_id=None):
         """Adds a task object into the board.
+
+        This is essentially a factory class for Task objects. It is
+        needed because of how unintuitive creating peewee objects are.
+
+        The returned object could be either be further manipulated or 
+        stored by the caller.
 
         If task_id is not provided, one will be generated based on task contents.
         However, the caller must then use :func:`get_task_list` to find the task
@@ -98,16 +132,49 @@ class Kbb(object):
         said task.
 
         Args:
-            task: task of class :class:`Task` to be inserted into the board
-            stage: the stage name (type string) for the task to be inserted
-                into
-            task_id: a unique identifier string for the task to be later
-                identified by
+            title: Title of the task (required)
+            stage: the stage name (type string) for the task to be inserted into
+            due: :class:`Datetime.date` object of when the task is due (optional)
+            notes: Additional notes related to the task (optional)
+            status: Status of task. Either DONE or NOTDONE (optional)
+            task_id: a unique identifier string for the task to be later identified by
         
         Returns:
-            :type:`None`
+            The added :class:`Task`
         """
-        return None
+        if not title:
+            raise ValueError('no task title')
+
+        if not stage:
+            stage = self.config['stages'][0]
+        elif stage.lower() not in self.config['stages']:
+            raise KeyError('{0} not in list of stages'.format(stage))
+
+        if not due:
+            # default time is for a task to be due today
+            due = date.today()
+
+        if not notes:
+            notes = ""
+
+        if not status:
+            status = Kbb.NOTDONE
+
+        if not task_id:
+            task_id = str(uuid.uuid4())
+
+        t = task.Task.create(title=title,
+                             stage=stage,
+                             due=due, 
+                             notes=notes,
+                             status=status,
+                             ident=task_id)
+
+        t.save()
+        #TODO save action to action table
+        self.sync()
+
+        return t
 
 
     def move_task(self, task_id, dest_stage):
@@ -121,7 +188,11 @@ class Kbb(object):
         Returns:
             :type:`None`
         """
-        pass
+        t = _locate_task(task_id)
+        t.stage = dest_stage
+        t.save()
+        #TODO save action to action table
+        self.sync()
 
 
     def delete_task(self, task_id):
@@ -133,16 +204,31 @@ class Kbb(object):
         Returns:
             The deleted :class:`Task` object
         """
-        pass
+        t = self._locate_task(task_id)
+        t.delete_instance()
+        #TODO add action to action table
+        self.sync()
+
 
 
     def sync(self):
-        """Syncs local database with Google cloud."""
+        """Syncs local database with Google cloud.
+        
+        This function will look inside the :class:`Action` table to see
+        what actions need to still be syned with the cloud.
+
+        In the case that we are offline, we will do nothing and simply 
+        wait for the next invocation of this function.
+        """
+        #TODO
         pass
 
 
     def get_task_list(self, stage=None, include_pending=True):
         """Return the list of all tasks in our board.
+
+        Note: include_pending isn't implemented in this release version
+        yet since it's usefulness is doubtful to me
 
         Args:
             stage: Only tasks belonging to this stage will be returned
@@ -152,12 +238,19 @@ class Kbb(object):
         Returns:
             A list of :class:`Task` objects
         """
-        pass
+        if not stage:
+            return list(task.Task.select())
+
+        elif stage and stage.lower() in self.config['stages']:
+            return list(task.Task.select().where(task.Task.stage == stage))
+
+        else:
+            raise KeyError('{0} not in list of stages'.format(stage))
 
 
     def get_stage_names(self):
         """Returns a list of all stage names"""
-        return None
+        return list(self.config['stages'])
 
     
     def __init__(self, kbb_dir=None):
@@ -173,6 +266,16 @@ class Kbb(object):
         # setup config options
         self.config = dict()
         self._load_config(kbb_dir, self.config)
+
+        # setup the Task class' database
+        database_name = os.path.join(kbb_dir, 'kbbdb.db')
+        task.database.init(database_name)
+        if 'task' not in task.database.get_tables():
+            task.database.create_tables([task.Task])
+
+        # now check to see we can access the database
+        task.database.connect()
+        task.database.close()
 
 
 def main():
