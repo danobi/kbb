@@ -3,7 +3,8 @@ import os
 import configparser
 import uuid
 import time
-from datetime import date
+import hashlib
+from datetime import datetime
 
 from apiclient import discovery
 import oauth2client
@@ -12,17 +13,52 @@ from oauth2client import tools
 import peewee
 
 import kbb.task as task
+from  kbb.task import Task as Task
 import kbb.action as action
+from kbb.action import Action as Action
 
 
 class Kbb(object):
 
-    NOTDONE = "needsAction"
-    DONE = "completed"
-
     # If modifying these scopes, delete these previously saved credentials
     SCOPES = 'https://www.googleapis.com/auth/tasks'
     APPLICATION_NAME = 'KanBanBoard'
+    DEFAULT_TASK_LIST = '@default'
+
+    
+    def _convert_str_to_iso3339(self, timestamp):
+        """Convert an ISO-3339 string to datetime
+
+        Args:
+            timestamp: string representation of ISO-3339 time
+        
+        Returns:
+            :class:`datetime` object
+
+        Example:
+            >>> ts = time.strptime('1985-04-12T23:20:50.52Z', '%Y-%m-%dT%H:%M:%S.%fZ')
+            >>> ts
+            time.struct_time(tm_year=1985, tm_mon=4, tm_mday=12, tm_hour=23, tm_min=20, ....
+        """
+        dt = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%S.%fZ')
+        return dt
+
+
+    def _generate_uuid(self, length):
+        """Generate a random UUID
+
+        Note: this function may generate collisions... but we're banking
+        on the fact that it is statistically very, very unlikely
+
+        Args:
+            length: Length of the UUID to be generated
+
+        Returns:
+            :type:`str` UUID
+        """
+        random_data = os.urandom(length * 8) 
+        uuid = hashlib.md5(random_data).hexdigest()[:length]
+        return uuid
 
 
     def _get_credentials(self, kbb_dir):
@@ -99,7 +135,7 @@ class Kbb(object):
 
     def _locate_task(self, task_id):
         """Find a task by its task_id"""
-        result_tasks = task.Task.select().where(task.Task.ident == task_id)
+        result_tasks = Task.select().where(Task.task_id == task_id)
 
         if not result_tasks:
             raise Exception('task_id not found')
@@ -110,6 +146,238 @@ class Kbb(object):
         return result_tasks[0]
 
 
+    def _insert_task_to_gtasks(self, task_id):
+        """Inserts the given task into the cloud
+
+        Note: this task should not already be present in the cloud.
+        
+        Args:
+            task_id: ID of the task to be inserted
+        """
+        new_task = self._locate_task(task_id)
+        new_task_dict = Task.to_gtask_dict(new_task)
+
+        print(new_task_dict)
+
+        result = self.service.tasks().insert(tasklist=self.DEFAULT_TASK_LIST, 
+                                             body=new_task_dict).execute()
+
+        print("succesfully inserted task_id={0} into cloud".format(result['id']))
+
+
+    def _delete_task_from_gtasks(self, task_id):
+        """Deletes the given task from the cloud.
+
+        Args:
+            task_id: ID of the task to be deleted
+        """
+        self.service.tasks().delete(tasklist=self.DEFAULT_TASK_LIST, 
+                                    task=task_id).execute()
+
+        print('successfully deleted task_id={0} from cloud'.format(task_id))
+
+
+    def _update_task_to_done(self, task_id):
+        """Updates the given task to done in the cloud.
+
+        Args:
+            task_id: ID of the task to be marked as done
+        """
+        # grab & update the existing task from the cloud
+        updated_task = self.service.tasks().get(tasklist=self.DEFAULT_TASK_LIST, 
+                                                task=task_id).execute()
+        updated_task['status'] = Task.DONE
+
+        # push the updated task back into the cloud
+        result = self.service.tasks().update(tasklist=self.DEFAULT_TASK_LIST, 
+                                             task=updated_task['id'], 
+                                             body=task).execute()
+        # Print the completed date.
+        print("successfully completed task_id={0} on {1}".format(task_id, result['completed']))
+
+
+    def _update_task_to_notdone(self, task_id):
+        """Updates the given task to not done in the cloud.
+
+        Args:
+            task_id: ID of the task to be marked as not done
+        """
+        # grab the existing task from the cloud
+        updated_task = self.service.tasks().get(tasklist=self.DEFAULT_TASK_LIST, 
+                                                task=task_id).execute()
+
+        if updated_task['status'] == Task.DONE:
+            updated_task['status'] = Task.NOTDONE
+
+            # push the updated task back into the cloud
+            result = self.service.tasks().update(tasklist=self.DEFAULT_TASK_LIST, 
+                                                 task=updated_task['id'], 
+                                                 body=task).execute()
+            # Print the completed date.
+            print("successfully updated task_id={0} to NOTDONE".format(task_id))
+
+        print("task_id={0} already in correct state")
+
+
+    def _get_all_task_ids_in_db(self):
+        """Retrieve all task UUIDs in local database
+        
+        Returns:
+            :type:`set` of all task UUIDs in local database
+        """
+        id_set = set()
+        task_list = Task.select()
+
+        for t in task_list:
+            if t.task_id in id_set:
+                raise Exception('task UUID collision')
+
+            id_set.add(t.task_id)
+
+        return id_set
+
+
+    def _get_all_cloud_tasks(self):
+        """Gets a list of all tasks present in the cloud
+
+        Returns:
+            :type:`list` of task dictionaries
+        """
+        list_of_tasks = list()
+        tasks = self.service.tasks().list(tasklist=self.DEFAULT_TASK_LIST).execute()
+
+        while True:
+            [list_of_tasks.append(t) for t in tasks['items']]
+            
+            if 'nextPageToken' not in tasks:
+                break
+
+            tasks = self.service.tasks().list(tasklist=self.DEFAULT_TASK_LIST,
+                                             pageToken=tasks['nextPageToken']).execute()
+
+        return list_of_tasks
+
+
+
+    def _sync_local_to_cloud(self):
+        """Sync local changes to the GTasks cloud"""
+        # grab all actions that need to be performed
+        action_list = Action.select()
+
+        for act in action_list:
+            if act.task_action == Action.TASKADD:
+                self._insert_task_to_gtasks(act.task_ident)
+
+            elif act.task_action == Action.TASKDEL:
+                self._delete_task_from_gtasks(act.task_ident)
+
+            elif act.task_action == Action.TASKMOV:
+                # we only mark the task as completed in GTasks if the 
+                # destination stage is the final (right most) stage
+                if act.end_stage == self.get_stage_names()[-1]:
+                    self._update_task_to_done(act.task_ident)
+
+                # else we mark the task as not completed 
+                else:
+                    self._update_task_to_notdone(act.task_ident)
+
+            # remove row from database since we don't want to run this action
+            # again on the next sync
+            act.delete_instance()
+
+
+    def _sync_cloud_to_local(self):
+        """Pull in any cloud changes to local database"""
+        cloud_task_list = self._get_all_cloud_tasks()
+        local_task_list = self.get_task_list()
+        local_uuid_set = self._get_all_task_ids_in_db()
+
+        # first look at any differences between the set(cloud) - set(local)
+        for t in cloud_task_list:
+            # add into local database any tasks not already present
+            if t['id'] not in local_uuid_set:
+                t_notes = t['notes'] if 'notes' in t else ""
+
+                if 'due' in t:
+                    t_due = self._convert_str_to_iso3339(t['due']) 
+                else:
+                    t_due = datetime.today()
+                    t_due = t_due.replace(hour=0, minute=0, second=0, microsecond=0)
+
+                if t['status'] == Task.DONE:
+                    t_stage = self.get_stage_names()[-1] 
+                else: 
+                    t_stage = self.get_stage_names()[0]
+
+                self._new_task(t['title'],
+                              stage=t_stage,
+                              due=t_due,
+                              notes=t_notes,
+                              status=t['status'],
+                              task_id=t['id'],
+                              cloud_sync=False)
+
+            # if the task is set to DONE in the cloud and NOTDONE locally,
+            # it must mean that the task was changed in the cloud side, 
+            # since all stage changes made locally are queued up in the 
+            # Action table
+            elif t['id'] in local_uuid_set:
+                local_task = self._locate_task(t['id'])
+                if t['status'] != local_task.status:
+                    local_task.status = t['status']
+                    local_task.save()
+
+        # next look at a ny differences between set(local) - set(cloud)
+        for t in local_task_list:
+            # if we have a local copy, our Action table is empty, and the cloud
+            # doesn't possess a copy, we delete the local copy
+            found = False
+            for cloud_t in cloud_task_list:
+                if t.task_id == cloud_t['id']:
+                    found = True
+
+            action_queue = Action.select()
+            if not found and not len(action_queue):
+                t.delete_instance()
+
+
+
+
+    def _new_task(self, title, stage, due, notes, status, task_id, cloud_sync):
+        """Internal new task creator
+
+        Args:
+            title: Title of the task 
+            stage: the stage name (type string) for the task to be inserted into 
+            due: :class:`Datetime.datetime` object of when the task is due
+            notes: Additional notes related to the task
+            status: Status of task. Either DONE or NOTDONE
+            task_id: GTasks compatible task id (42 character alphanum string)
+            cloud_sync: whether or not to sync this new task with GTasks cloud
+        
+        Returns:
+            The added :class:`Task`
+        """
+        t = Task.create(title=title,
+                        stage=stage,
+                        due=due, 
+                        notes=notes,
+                        status=status,
+                        task_id=task_id,
+                        deleted=False)
+        t.save()
+
+        # create Action to be later updated to the cloud
+        if cloud_sync:
+            Action.create(task_ident=task_id,
+                          task_action=Action.TASKADD,
+                          start_stage='None',
+                          end_stage=stage).save()
+            self.sync()
+
+        return t
+
+
 
     def new_task(self, 
                  title, 
@@ -117,7 +385,7 @@ class Kbb(object):
                  due=None,
                  notes=None,
                  status=None,
-                 task_id=None):
+                 cloud_sync=True):
         """Adds a task object into the board.
 
         This is essentially a factory class for Task objects. It is
@@ -126,18 +394,16 @@ class Kbb(object):
         The returned object could be either be further manipulated or 
         stored by the caller.
 
-        If task_id is not provided, one will be generated based on task contents.
-        However, the caller must then use :func:`get_task_list` to find the task
+        The caller must then use :func:`get_task_list` to find the task
         that it inserted into the board if the caller wants to later manipulate
         said task.
 
         Args:
-            title: Title of the task (required)
-            stage: the stage name (type string) for the task to be inserted into
-            due: :class:`Datetime.date` object of when the task is due (optional)
+            title: Title of the task 
+            stage: the stage name (type string) for the task to be inserted into (optional)
+            due: :class:`Datetime.datetime` object of when the task is due (optional)
             notes: Additional notes related to the task (optional)
             status: Status of task. Either DONE or NOTDONE (optional)
-            task_id: a unique identifier string for the task to be later identified by
         
         Returns:
             The added :class:`Task`
@@ -146,35 +412,24 @@ class Kbb(object):
             raise ValueError('no task title')
 
         if not stage:
-            stage = self.config['stages'][0]
-        elif stage.lower() not in self.config['stages']:
+            stage = self.get_stage_names()[0]
+        elif stage.lower() not in self.get_stage_names():
             raise KeyError('{0} not in list of stages'.format(stage))
 
         if not due:
-            # default time is for a task to be due today
-            due = date.today()
+            # default time is for a task to be due today (year, month, and date specifiers only)
+            due = datetime.today()
+            due = due.replace(hour=0, minute=0, second=0, microsecond=0)
 
         if not notes:
             notes = ""
 
         if not status:
-            status = Kbb.NOTDONE
+            status = Task.NOTDONE
 
-        if not task_id:
-            task_id = str(uuid.uuid4())
+        task_id = self._generate_uuid(Task.UUID_LENGTH)
 
-        t = task.Task.create(title=title,
-                             stage=stage,
-                             due=due, 
-                             notes=notes,
-                             status=status,
-                             ident=task_id)
-
-        t.save()
-        #TODO save action to action table
-        self.sync()
-
-        return t
+        return self._new_task(title, stage, due, notes, status, task_id, cloud_sync)
 
 
     def move_task(self, task_id, dest_stage):
@@ -189,9 +444,16 @@ class Kbb(object):
             :type:`None`
         """
         t = _locate_task(task_id)
+        old_stage = t.stage
         t.stage = dest_stage
         t.save()
-        #TODO save action to action table
+
+        # create Action to be later updated to the cloud
+        Action.create(task_ident=task_id,
+                      task_action=Action.TASKMOV,
+                      start_stage=old_stage,
+                      end_stage=dest_stage).save()
+
         self.sync()
 
 
@@ -205,23 +467,34 @@ class Kbb(object):
             The deleted :class:`Task` object
         """
         t = self._locate_task(task_id)
-        t.delete_instance()
-        #TODO add action to action table
-        self.sync()
+        t.deleted = True
+        t.save()
 
+        # create Action to be later updated to the cloud
+        Action.create(task_ident=task_id,
+                      task_action=Action.TASKDEL,
+                      start_stage=t.stage,
+                      end_stage='None').save()
+
+        self.sync()
 
 
     def sync(self):
         """Syncs local database with Google cloud.
+
+        This function will first pull in any updates from the GTasks
+        cloud.
         
-        This function will look inside the :class:`Action` table to see
-        what actions need to still be syned with the cloud.
+        Then this function will look inside the :class:`Action` table to
+        see what actions need to still be syned with the cloud.
 
         In the case that we are offline, we will do nothing and simply 
         wait for the next invocation of this function.
+        
+        TODO: handle offline case
         """
-        #TODO
-        pass
+        self._sync_cloud_to_local()
+        self._sync_local_to_cloud()
 
 
     def get_task_list(self, stage=None, include_pending=True):
@@ -239,10 +512,10 @@ class Kbb(object):
             A list of :class:`Task` objects
         """
         if not stage:
-            return list(task.Task.select())
+            return list(Task.select())
 
-        elif stage and stage.lower() in self.config['stages']:
-            return list(task.Task.select().where(task.Task.stage == stage))
+        elif stage and stage.lower() in self.get_stage_names():
+            return list(Task.select().where(Task.stage == stage))
 
         else:
             raise KeyError('{0} not in list of stages'.format(stage))
@@ -271,7 +544,12 @@ class Kbb(object):
         database_name = os.path.join(kbb_dir, 'kbbdb.db')
         task.database.init(database_name)
         if 'task' not in task.database.get_tables():
-            task.database.create_tables([task.Task])
+            task.database.create_tables([Task])
+
+        # setup the Action class' database
+        action.database.init(database_name)
+        if 'action' not in action.database.get_tables():
+            action.database.create_tables([action.Action])
 
         # now check to see we can access the database
         task.database.connect()
@@ -285,15 +563,6 @@ def main():
 
     # execute query
     results = kbb.service.tasklists().list(maxResults=10).execute()
-
-    # parse query results
-    items = results.get('items', [])
-    if not items:
-        print('No task lists found.')
-    else:
-        print('Task lists:')
-        for item in items:
-            print('{0} ({1})'.format(item['title'], item['id']))
 
     # get some example tasks
     tasks = kbb.service.tasks().list(tasklist='@default').execute()

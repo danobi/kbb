@@ -7,13 +7,36 @@ database = peewee.SqliteDatabase(None)
 class Task(peewee.Model):
     """Class representation of a single task"""
 
+    UUID_LENGTH = 44
+    NOTDONE = "needsAction"
+    DONE = "completed"
+
+
     # public properties
     title = peewee.TextField()
     stage = peewee.CharField()
-    due = peewee.DateField()
+    due = peewee.DateTimeField()
     notes = peewee.TextField()
     status = peewee.CharField()
-    ident = peewee.TextField()
+    task_id = peewee.TextField()
+    deleted = peewee.BooleanField()
+
+
+    @staticmethod
+    def to_gtask_dict(task):
+        d = dict()
+
+        # first the required fields
+        d['title'] = task.title
+        d['due'] = task.due.isoformat() + str('Z') # the Z is required by the GTasks API
+        d['status'] = task.status
+        #d['id'] = task.ident
+
+        # then the optional fields
+        if task.notes:
+            d['notes'] = task.notes
+
+        return d
 
 
     class Meta:
