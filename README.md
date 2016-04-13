@@ -15,8 +15,8 @@ Features:
 
 TODO:
 ----
-[x] Implement core API
+- [x] Implement core API
 
-[ ] Implement UI
+- [ ] Implement UI
 
-[ ] Create testing framework
+- [ ] Create testing framework
