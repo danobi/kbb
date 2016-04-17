@@ -443,7 +443,7 @@ class Kbb(object):
         Returns:
             :type:`None`
         """
-        t = _locate_task(task_id)
+        t = self._locate_task(task_id)
         old_stage = t.stage
         t.stage = dest_stage
         t.save()
