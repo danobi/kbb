@@ -30,7 +30,7 @@ class Task(peewee.Model):
         d['title'] = task.title
         d['due'] = task.due.isoformat() + str('Z') # the Z is required by the GTasks API
         d['status'] = task.status
-        #d['id'] = task.ident
+        #d['id'] = task.task_id
 
         # then the optional fields
         if task.notes:

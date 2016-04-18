@@ -196,18 +196,20 @@ class Kbb(object):
         # grab the existing task from the cloud
         updated_task = self.service.tasks().get(tasklist=self.DEFAULT_TASK_LIST, 
                                                 task=task_id).execute()
+        # task on disk
+        task = self._locate_task(task_id)
 
         if updated_task['status'] == Task.DONE:
             updated_task['status'] = Task.NOTDONE
 
-            # push the updated task back into the cloud
-            result = self.service.tasks().update(tasklist=self.DEFAULT_TASK_LIST, 
-                                                 task=updated_task['id'], 
-                                                 body=task).execute()
-            # Print the completed date.
-            print("successfully updated task_id={0} to NOTDONE".format(task_id))
-
-        print("task_id={0} already in correct state")
+            # delete the old task and insert new task
+            # Note: for whatever reason using the update() function doesn't work,
+            #       so we're left with this option
+            self.service.tasks().delete(tasklist=self.DEFAULT_TASK_LIST,
+                                        task=task.task_id).execute()
+            task_dict = Task.to_gtask_dict(task)
+            result = self.service.tasks().insert(tasklist=self.DEFAULT_TASK_LIST, 
+                                                 body=task_dict).execute()
 
 
     def _get_all_task_ids_in_db(self):
@@ -437,6 +439,8 @@ class Kbb(object):
         t = self._locate_task(task_id)
         old_stage = t.stage
         t.stage = dest_stage
+        if dest_stage != self.get_stage_names()[-1]:
+            t.status = Task.NOTDONE
         t.save()
 
         # create Action to be later updated to the cloud
@@ -484,8 +488,8 @@ class Kbb(object):
         
         TODO: handle offline case
         """
-        self._sync_cloud_to_local()
         self._sync_local_to_cloud()
+        self._sync_cloud_to_local()
 
 
     def get_task_list(self, stage=None, include_pending=True):
