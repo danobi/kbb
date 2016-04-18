@@ -117,9 +117,6 @@ class Stage(Drawable):
         max_num_tasks = math.floor((bry - tly - account_for_borders) / total_task_height) 
         tasks_to_display = tasks_in_due_range[:max_num_tasks]
 
-        with open('kbb.log', 'a') as f:
-            [f.write("task: {0}, task_id={1}\n".format(t.title, t.task_id)) for t in tasks_to_display]
-
         # now we can draw all the tasks to the screen
         for idx, task in enumerate(tasks_to_display):
             task_tlx = tlx + 1
