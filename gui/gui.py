@@ -42,7 +42,7 @@ class GUI(object):
             bottom_right_y = stage_height
 
             screen_area = ScreenArea(upper_left_x, upper_left_y, bottom_right_x, bottom_right_y)
-            stage = Stage(self.kb_board, self.display, screen_area, stage_name, GUI.LOOKAHEAD_DAYS)
+            stage = Stage(self.kb_board, self.display, screen_area, stage_name, GUI.LOOKAHEAD_DAYS, self._task_id_map)
             ret_stages.append(stage)
 
         return ret_stages
@@ -60,7 +60,7 @@ class GUI(object):
         bottom_right_y = self.display.height() - GUI.WINDOW_EDGE_LEEWAY
 
         screen_area = ScreenArea(upper_left_x, upper_left_y, bottom_right_x, bottom_right_y)
-        cmd_prompt = CmdPrompt(self.kb_board, self.display, screen_area)
+        cmd_prompt = CmdPrompt(self.kb_board, self.display, screen_area, self._task_id_map)
 
         return cmd_prompt
 
@@ -86,14 +86,22 @@ class GUI(object):
 
 
     def evaluate_buffer(self):
-        """Evaluate the cmd_prompt buffer"""
-        self._cmd_prompt.evaluate_buffer()
+        """Evaluate the cmd_prompt buffer
+        
+        Returns:
+            The propagated return value from CmdPrompt.evaluate_buffer()
+        """
+        return self._cmd_prompt.evaluate_buffer()
 
 
     def draw(self):
         """Overriden draw() method from superclass"""
         # as a precondition to drawing, we need to clear the cell bufffer
         self.display.clear()
+
+        # we have to clear out the "global" _task_id_map because the mappings might
+        # change if the window resizes or tasks get moved around
+        self._task_id_map.clear()
 
         # now we can draw all our objects
         [stage.draw() for stage in self._stages]
@@ -102,8 +110,15 @@ class GUI(object):
                 
 
     def __init__(self):
+        """Init
+
+        _task_id_map is essentially a global dictionary mapping low value integers
+        to tasks. This is necessary to manipulate the tasks through the command prompt.
+        It's 50% a hack so TODO: fix this
+        """
         self.kb_board = kbb.Kbb()
         self.display = termbox.Termbox()
+        self._task_id_map = dict()
         self._stages = self._create_stages()
         self._cmd_prompt = self._create_cmd_prompt()
         self.draw()
@@ -136,7 +151,11 @@ def main():
 
             # evaluate
             elif key == termbox.KEY_ENTER:
-                g.evaluate_buffer()
+                ret = g.evaluate_buffer()
+
+                if ret == CmdPrompt.CMD_ACTION_QUIT:
+                    g.display.close()
+                    break
 
         # enabling this will resolve some bugs (if any) at the cost of decreasing draw performance
         g.draw()
