@@ -156,13 +156,8 @@ class Kbb(object):
         """
         new_task = self._locate_task(task_id)
         new_task_dict = Task.to_gtask_dict(new_task)
-
-        print(new_task_dict)
-
         result = self.service.tasks().insert(tasklist=self.DEFAULT_TASK_LIST, 
                                              body=new_task_dict).execute()
-
-        print("succesfully inserted task_id={0} into cloud".format(result['id']))
 
 
     def _delete_task_from_gtasks(self, task_id):
@@ -173,8 +168,6 @@ class Kbb(object):
         """
         self.service.tasks().delete(tasklist=self.DEFAULT_TASK_LIST, 
                                     task=task_id).execute()
-
-        print('successfully deleted task_id={0} from cloud'.format(task_id))
 
 
     def _update_task_to_done(self, task_id):
