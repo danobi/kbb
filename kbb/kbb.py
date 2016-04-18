@@ -191,9 +191,7 @@ class Kbb(object):
         # push the updated task back into the cloud
         result = self.service.tasks().update(tasklist=self.DEFAULT_TASK_LIST, 
                                              task=updated_task['id'], 
-                                             body=task).execute()
-        # Print the completed date.
-        print("successfully completed task_id={0} on {1}".format(task_id, result['completed']))
+                                             body=updated_task).execute()
 
 
     def _update_task_to_notdone(self, task_id):
