@@ -58,4 +58,9 @@ TODO:
 
 - [ ] Create testing framework
 
+- [ ] Package GTasks API key
+
 - [ ] Write more thorough user documentation
+  - [ ] Config file documentation
+
+- [ ] Package `kbb`
