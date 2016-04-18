@@ -549,29 +549,3 @@ class Kbb(object):
         # now check to see we can access the database
         task.database.connect()
         task.database.close()
-
-
-def main():
-    """Shows basic usage of the Google Tasks API."""
-    kbb_dir = os.path.join(os.path.expanduser('~'), '.kbb/')
-    kbb = Kbb(kbb_dir)
-
-    # execute query
-    results = kbb.service.tasklists().list(maxResults=10).execute()
-
-    # get some example tasks
-    tasks = kbb.service.tasks().list(tasklist='@default').execute()
-    while True:
-        for task in tasks['items']:
-            print(task['title'])
-        print(len(tasks['items']))
-        
-        if 'nextPageToken' not in tasks:
-            break
-
-        tasks = kbb.service.tasks().list(tasklist='@default', 
-                                     pageToken=tasks['nextPageToken']).execute()
-    
-
-if __name__ == '__main__':
-    main()
