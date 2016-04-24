@@ -5,7 +5,22 @@ import peewee
 database = peewee.SqliteDatabase(None) 
 
 class Task(peewee.Model):
-    """Class representation of a single task"""
+    """Class representation of a single task
+    
+    Note: read this carefully:
+        task_id's that are generated locally are *NOT* passed up to the cloud.
+        The reason is that the GTasks API apparently doesn't take ids in the input
+        for new tasks. 
+
+        What actually happens in kbb is that when a new task is created locally, the
+        local task gets put into the local database, then the local task is synced up
+        to the cloud. The cloud then generates a new id. When we sync the cloud back to 
+        the local database, the local task gets deleted and a new local task is created
+        with the data from the cloud.
+
+        So essentially, any task_id reference before a cloud sync does not point to 
+        anything.
+    """
 
     UUID_LENGTH = 44
     NOTDONE = "needsAction"
