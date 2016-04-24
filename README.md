@@ -59,12 +59,12 @@ TODO:
 - [ ] Create testing framework
   - [ ] Use separate testing environment 
 
-- [ ] Package GTasks API key
-
 - [ ] Write more thorough user documentation
   - [ ] Config file documentation
 
 - [ ] Package `kbb`
+  - [ ] Put some nice screenshots into this README
+  - [ ] Package GTasks API key
 
 - [ ] Clean up API
   - [ ] Remove returning of `Task` object after inserting task, since task_id isn't consistent after online sync
