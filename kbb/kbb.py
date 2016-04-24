@@ -3,7 +3,7 @@ import os
 import configparser
 import uuid
 import time
-import hashlib
+import binascii
 from datetime import datetime
 
 from apiclient import discovery
@@ -56,8 +56,9 @@ class Kbb(object):
         Returns:
             :type:`str` UUID
         """
-        random_data = os.urandom(length * 8) 
-        uuid = hashlib.md5(random_data).hexdigest()[:length]
+        random_data = os.urandom(length)
+        string_representation = binascii.b2a_hex(random_data).decode()
+        uuid = string_representation[:length]
         return uuid
 
 
