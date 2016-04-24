@@ -6,7 +6,7 @@ import pytest
 import kbb
 
 
-def test_datetime_conversion_easy():
+def test_datetime_conversion_random_example():
     k = kbb.Kbb()
     string = '1985-04-12T23:20:50.52Z'
     timeobj = datetime.datetime(1985, 4, 12, hour=23, minute=20, second=50, microsecond=520000)

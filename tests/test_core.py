@@ -9,7 +9,7 @@ from kbb.task import Task as Task
 #TODO: make the tests not use the actual user's kbb environment
 
 
-def test_add_task_easy_offline():
+def test_add_task_increment_offline():
     k = kbb.Kbb()
     
     old_len = len(k.get_task_list())
@@ -36,7 +36,7 @@ def test_add_task_all_params_offline():
     assert new_len - old_len == 1
 
 
-def test_delete_easy_offline():
+def test_delete_decrement_offline():
     k = kbb.Kbb()
 
     old_len = len(k.get_task_list())
@@ -96,7 +96,7 @@ def test_move_task_offline():
     assert (k._locate_task(task.task_id).stage) == new_stage
 
 
-def test_move_task_online():
+def test_move_task_online_one_way():
     k = kbb.Kbb()
 
     task_name = 'online move task test'
@@ -105,6 +105,7 @@ def test_move_task_online():
     task = k.new_task(task_name)
     new_len = len(k._get_all_cloud_tasks())
 
+    # find new task id
     new_task_id = None
     for t in k.get_task_list():
         if t.title == task_name:
