@@ -226,6 +226,9 @@ class Kbb(object):
             if t.task_id in id_set:
                 raise Exception('task UUID collision')
 
+            if t.deleted:
+                continue
+
             id_set.add(t.task_id)
 
         return id_set
