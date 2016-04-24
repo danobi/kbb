@@ -96,12 +96,13 @@ class Kbb(object):
         return credentials
 
 
-    def _load_config(self, kbb_dir, config):
+    def _load_config(self, kbb_dir, config, config_fname):
         """Loads kbb configuration options
         
         Args:
             kbb_dir: root directory of kbb files
             config: dict to load configuration options into. For example:
+            config_fname: file name of the configuration file
                 
                 {'CapitalizedTopLevelConfig: 'True',
                  'lowercaseListConfig: [1,2,3,4]'}
@@ -109,7 +110,7 @@ class Kbb(object):
         Returns:
             :type:`None`
         """
-        config_file_path = os.path.join(kbb_dir, 'config')
+        config_file_path = os.path.join(kbb_dir, config_fname)
         config_parser = configparser.ConfigParser()
 
         try:
@@ -542,7 +543,7 @@ class Kbb(object):
 
         # setup config options
         self.config = dict()
-        self._load_config(kbb_dir, self.config)
+        self._load_config(kbb_dir, self.config, 'config')
 
         # setup the Task class' database
         database_name = os.path.join(kbb_dir, 'kbbdb.db')
