@@ -2,8 +2,7 @@
 [General]
 SyncRate = 60
 
-# Stage format is specified as: StageName = Active,
-# where StageName is the name of the stage and Active is whether or not to use this stage
+# Stage format is specified as: [StageName] = True
 [Stages]
 Todo = True
 Doing = True
