@@ -35,6 +35,16 @@ def test_generate_uuid_length():
     assert len(k._generate_uuid(100)) == 100
 
 
+def test_generate_uuid_invalid_length():
+    k = kbb.Kbb()
+
+    with pytest.raises(ValueError):
+        k._generate_uuid(0)
+
+    with pytest.raises(ValueError):
+        k._generate_uuid(-5)
+
+
 def test_locate_task_easy():
     k = kbb.Kbb()
     task = k.new_task('test task', cloud_sync=False)

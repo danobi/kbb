@@ -56,6 +56,9 @@ class Kbb(object):
         Returns:
             :type:`str` UUID
         """
+        if length <= 0:
+            raise ValueError('uuid length cannot be 0 or less')
+
         random_data = os.urandom(length)
         string_representation = binascii.b2a_hex(random_data).decode()
         uuid = string_representation[:length]
