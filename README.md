@@ -3,6 +3,8 @@ kbb
 
 `kbb` is a kanban board implementation for the terminal. It's core feature is that it syncs with Google Tasks via the developer API. 
 
+![screenshot](/images/screenshot.png)
+
 
 Features:
 ----
