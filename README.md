@@ -27,7 +27,7 @@ Quickstart:
 
 5) `pip install -r requirements.txt`
 
-6) `python -m gui.gui   # start kbb`
+6) `make   # start kbb`
 
 
 Commands:
