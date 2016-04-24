@@ -127,13 +127,13 @@ class Kbb(object):
                 if stages.getboolean(key):
                     config['stages'].append(key.lower())
 
-        except ParsingError:
+        except configparser.ParsingError as e:
             print('Error parsing config file. Aborting.')
-            raise ParsingError
+            raise e
 
-        except NoSectionError:
+        except KeyError as e:
             print('Required config section not found. Aborting.')
-            raise NoSectionError
+            raise e
 
         return None
 
