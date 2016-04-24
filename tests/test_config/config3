@@ -1,0 +1,9 @@
+# General options
+[General]
+SyncRate = 60
+
+# Stage format is specified as: StageName = Active
+[Stages
+todo = True
+doing = True
+done = True
