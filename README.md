@@ -57,6 +57,7 @@ TODO:
 - [x] Implement UI
 
 - [ ] Create testing framework
+  - [ ] Use separate testing environment 
 
 - [ ] Package GTasks API key
 
@@ -64,3 +65,6 @@ TODO:
   - [ ] Config file documentation
 
 - [ ] Package `kbb`
+
+- [ ] Clean up API
+  - [ ] Remove returning of `Task` object after inserting task, since task_id isn't consistent after online sync
