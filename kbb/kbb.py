@@ -195,6 +195,8 @@ class Kbb(object):
     def _update_task_to_notdone(self, task_id):
         """Updates the given task to not done in the cloud.
 
+        NOTE: our local task_id is changed after this function executes
+
         Args:
             task_id: ID of the task to be marked as not done
         """
