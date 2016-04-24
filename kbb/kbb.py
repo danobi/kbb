@@ -429,7 +429,7 @@ class Kbb(object):
         return self._new_task(title, stage, due, notes, status, task_id, cloud_sync)
 
 
-    def move_task(self, task_id, dest_stage):
+    def move_task(self, task_id, dest_stage, cloud_sync=True):
         """Move a specified task into :param:`dest_stage`.
 
         Args:
@@ -448,15 +448,16 @@ class Kbb(object):
         t.save()
 
         # create Action to be later updated to the cloud
-        Action.create(task_ident=task_id,
-                      task_action=Action.TASKMOV,
-                      start_stage=old_stage,
-                      end_stage=dest_stage).save()
+        if cloud_sync:
+            Action.create(task_ident=task_id,
+                          task_action=Action.TASKMOV,
+                          start_stage=old_stage,
+                          end_stage=dest_stage).save()
 
-        self.sync()
+            self.sync()
 
 
-    def delete_task(self, task_id):
+    def delete_task(self, task_id, cloud_sync=True):
         """Deletes a specified task from the board.
 
         Args:
@@ -470,12 +471,13 @@ class Kbb(object):
         t.save()
 
         # create Action to be later updated to the cloud
-        Action.create(task_ident=task_id,
-                      task_action=Action.TASKDEL,
-                      start_stage=t.stage,
-                      end_stage='None').save()
+        if cloud_sync:
+            Action.create(task_ident=task_id,
+                          task_action=Action.TASKDEL,
+                          start_stage=t.stage,
+                          end_stage='None').save()
 
-        self.sync()
+            self.sync()
 
 
     def sync(self):
